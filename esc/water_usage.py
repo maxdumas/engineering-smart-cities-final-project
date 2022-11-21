@@ -6,8 +6,8 @@ explanatory text.
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from typing import Union, Any
+from .util import minute_in_day, MINUTES_PER_DAY
 
-MINUTES_PER_DAY = 60 * 24
 
 # See ../notebooks/building-heights.ipynb for more information about how these
 # numbers were derived.
@@ -58,9 +58,7 @@ def relative_occupant_water_demand(
 ) -> Union[np.floating[Any], NDArray[np.floating[Any]]]:
     """Given a the time of day in minutes t, returns the estimated factor of
     occupant water demand relative to average water demand."""
-
-    t_whole_min = np.rint(t).astype(np.int32)
-    return water_demand[t_whole_min]
+    return water_demand[minute_in_day(t)]
 
 
 def typical_building_water_demand(
