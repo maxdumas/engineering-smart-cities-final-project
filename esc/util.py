@@ -2,6 +2,8 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from typing import Union, Any
 
+MEAN_WATER_TANK_HEIGHT_M = 3.6576
+
 MINUTES_PER_DAY = 60 * 24
 
 def minute_in_day(t: ArrayLike) -> Union[np.int32, NDArray[np.int32]]:
