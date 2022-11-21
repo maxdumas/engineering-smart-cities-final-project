@@ -13,6 +13,7 @@ from esc.water_usage import (
     TYPICAL_BUILDING_MEAN_WATER_CONSUMPTION_LITER_PER_MINUTE,
     relative_occupant_water_demand,
 )
+from esc.util import MEAN_WATER_TANK_HEIGHT_M
 
 
 SIMULATION_DURATION_S = 172800
@@ -60,12 +61,13 @@ class EPANETEnv(Env):
         # Action space is one of {0, 1}, where 0 means the pump is off, and 1
         # means the pump is on
         self.action_space = Discrete(2)
-        # Observation space is 2 dimensional: 1st dimension is the current
+        # Observation space is 3 dimensional: 1st dimension is the current
         # electricity price, 2nd dimension is the current occupant water demand.
         # Electricity price is unbounded in either direction, but water demand
-        # must be non-negative.
+        # must be non-negative. Highest possible value is
+        # MEAN_WATER_TANK_HEIGHT_M.
         self.observation_space = Box(
-            low=np.array([0.0, -np.inf]), high=np.array([np.inf, np.inf])
+            low=np.array([0.0, -np.inf, 0.0]), high=np.array([np.inf, np.inf, MEAN_WATER_TANK_HEIGHT_M])
         )
 
     def reset(self):
@@ -79,8 +81,11 @@ class EPANETEnv(Env):
         self.i = 0
         self.pump_energy_cost: float = 0.0
 
+        H = self.d.getNodeHydraulicHead()
+        tank_head = H[self.tank_index - 1] - self.tank_elevation
+
         return np.array(
-            [electricity_rate(self.i), relative_occupant_water_demand(self.i)]
+            [electricity_rate(self.i), relative_occupant_water_demand(self.i), tank_head]
         )
 
     def step(self, action):
@@ -113,7 +118,7 @@ class EPANETEnv(Env):
         return (
             # Observation
             np.array(
-                [electricity_rate(self.i), relative_occupant_water_demand(self.i)]
+                [electricity_rate(self.i), relative_occupant_water_demand(self.i), tank_head]
             ),
             # Reward
             reward_low_energy_cost(self.pump_energy_cost)
