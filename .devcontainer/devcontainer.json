@@ -45,7 +45,7 @@
 	"remoteUser": "jovyan",
 	// Uncomment to enable GPU support.
 	"runArgs": [
-		"--gpus", "all",
+		// "--gpus", "all",
 		"--shm-size", "2gb"
 	],
 	"features": {
