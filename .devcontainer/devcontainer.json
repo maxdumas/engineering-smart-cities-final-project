@@ -1,18 +1,8 @@
 {
-	"name": "Jupyter Data Science Notebooks (Community)",
+	"name": "Universal Container with optional GPU support",
+	// "image": "mcr.microsoft.com/devcontainers/universal",
 	"build": {
 		"dockerfile": "Dockerfile"
-	},
-	"overrideCommand": false,
-	
-	// Forward Jupyter port locally, mark required
-	"forwardPorts": [8888],
-	"portsAttributes": {
-		"8888": {
-			"label": "Jupyter",
-			"requireLocalPort": true,
-			"onAutoForward": "ignore"
-		}
 	},
 
 	// Configure tool-specific properties.
@@ -21,28 +11,27 @@
 		"vscode": {
 			// Set *default* container specific settings.json values on container create.
 			"settings": { 
-				"python.defaultInterpreterPath": "/opt/conda/bin/python"
+				"python.defaultInterpreterPath": "/opt/conda/bin/python",
+				"python.condaPath": "/opt/conda/bin/conda"
 			},
 			
 			// Add the IDs of extensions you want installed when the container is created.
 			"extensions": [
+				"ms-toolsai.jupyter",
 				"ms-python.python"
 			]
 		}
 	},
-
+	"waitFor": "onCreateCommand",
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": [
-		"mkdir -p $(python -m site --user-site)/esc.pth",
-		"pwd > $(python -m site --user-site)/esc.pth"
-	],
+	"postCreateCommand": "mkdir -p $(python -m site --user-site) && pwd > $(python -m site --user-site)/esc.pth && conda env update -n base -f environment.yml",
 
 	"hostRequirements": {
 		"memory": "8gb"
 	},
 
 	// Set `remoteUser` to `root` to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
-	"remoteUser": "jovyan",
+	// "remoteUser": "jovyan",
 	// Uncomment to enable GPU support.
 	"runArgs": [
 		// "--gpus", "all",
