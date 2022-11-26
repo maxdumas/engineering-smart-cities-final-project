@@ -44,7 +44,10 @@
 	// Set `remoteUser` to `root` to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "jovyan",
 	// Uncomment to enable GPU support.
-	// "runArgs": ["--gpus", "all"],
+	"runArgs": [
+		"--gpus", "all",
+		"--shm-size", "2gb"
+	],
 	"features": {
 		// Uncomment to enable GPU support.
 		// "ghcr.io/devcontainers/features/nvidia-cuda:1": {
