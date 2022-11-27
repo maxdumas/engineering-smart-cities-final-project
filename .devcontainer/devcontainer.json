@@ -24,7 +24,7 @@
 	},
 	"waitFor": "onCreateCommand",
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "mkdir -p $(python -m site --user-site) && pwd > $(python -m site --user-site)/esc.pth && conda env update -n base -f environment.yml",
+	"postCreateCommand": "mkdir -p $(python -m site --user-site) && pwd > $(python -m site --user-site)/esc.pth",
 
 	"hostRequirements": {
 		"memory": "8gb"
