@@ -1,0 +1,119 @@
+[TITLE]
+
+[JUNCTIONS]
+ J1                                    0.0000
+
+[RESERVOIRS]
+ R1                                    0.0000                                
+
+[TANKS]
+ T1                                   34.7514       1.0000       0.0000       3.6576       3.6576     111.2934                                
+
+[PIPES]
+ P2                              T1                              J1                                   34.7514     304.8000     100.0000       0.0000       
+
+[PUMPS]
+ PUMP                            R1                              T1                               HEAD C1
+
+[VALVES]
+
+[DEMANDS]
+ J1                                   74.605293                                
+
+[EMITTERS]
+
+[STATUS]
+
+[PATTERNS]
+
+[CURVES]
+ C1                                    0.0000      68.0000
+ C1                                   38.0000      65.0000
+ C1                                   76.0000      62.0000
+ C1                                  114.0000      54.0000
+ C1                                  151.0000      43.0000
+ C1                                  189.0000      22.0000
+
+[CONTROLS]
+
+[RULES]
+
+[QUALITY]
+
+[SOURCES]
+
+[MIXING]
+ T1                              MIXED          1.8913
+
+[REACTIONS]
+ ORDER  BULK            1.00
+ ORDER  WALL            1
+ ORDER  TANK            1.00
+ GLOBAL BULK            0.000000
+ GLOBAL WALL            0.000000
+
+[ENERGY]
+ GLOBAL EFFIC        75.0000
+ DEMAND CHARGE       0.0000
+
+[TIMES]
+ DURATION            0:00:00
+ HYDRAULIC TIMESTEP  1:00:00
+ QUALITY TIMESTEP    0:06:00
+ REPORT TIMESTEP     1:00:00
+ REPORT START        0:00:00
+ PATTERN TIMESTEP    1:00:00
+ PATTERN START       0:00:00
+ RULE TIMESTEP       0:06:00
+ START CLOCKTIME     0:00:00
+ STATISTIC           NONE
+
+[OPTIONS]
+ UNITS               LPM
+ PRESSURE            METERS
+ HEADLOSS            H-W
+ UNBALANCED          STOP
+ QUALITY             NONE
+ DEMAND MULTIPLIER   1.0000
+ EMITTER EXPONENT    0.5000
+ VISCOSITY           1.000000
+ DIFFUSIVITY         1.000000
+ SPECIFIC GRAVITY    1.000000
+ TRIALS              200
+ ACCURACY            0.00100000
+ TOLERANCE           0.01000000
+ CHECKFREQ           2
+ MAXCHECK            10
+ DAMPLIMIT           0.00000000
+
+[REPORT]
+ PAGESIZE            0
+ STATUS              NO
+ SUMMARY             YES
+ ENERGY              NO
+ MESSAGES            YES
+ NODES               NONE
+ LINKS               NONE
+ Elevation           NO
+ Demand              PRECISION 2
+ Head                PRECISION 2
+ Pressure            PRECISION 2
+ Quality             PRECISION 2
+ Length              NO
+ Diameter            NO
+ Flow                PRECISION 2
+ Velocity            PRECISION 2
+ Headloss            PRECISION 2
+ Quality             NO
+ State               NO
+ Setting             NO
+ Reaction            NO
+
+[COORDINATES]
+ J1                                   50.000000    -100.000000
+ R1                                  -50.000000    -100.000000
+ T1                                    0.000000      50.000000
+
+[VERTICES]
+
+[END]
