@@ -8,7 +8,7 @@ from gym import Env
 from gym.spaces import Box, Discrete
 
 from esc.electricity_rates import electricity_rate
-from esc.reward import reward_high_tank_head, reward_low_energy_cost
+from esc.reward import reward_high_tank_head, reward_low_energy_cost, reward_few_pump_switches
 from esc.water_usage import (
     TYPICAL_BUILDING_MEAN_WATER_CONSUMPTION_LITER_PER_MINUTE,
     relative_occupant_water_demand,
@@ -73,7 +73,7 @@ class EPANETEnv(Env):
         # non-negative. Highest possible tank value is MEAN_WATER_TANK_HEIGHT_M.
         self.observation_space = Box(
             low=np.array([  *np.zeros(N),        *(-np.inf * np.ones(M)),  -np.inf,                      0.0, 0.0]),
-            high=np.array([ *(np.inf * np.ones(N)), *(np.inf * np.ones(M)), MEAN_WATER_TANK_HEIGHT_M, 1440.0, 1.0])
+            high=np.array([ *(np.inf * np.ones(N)), *(np.inf * np.ones(M)), MEAN_WATER_TANK_HEIGHT_M, 1440.0, np.inf])
         )
 
     def reset(self):
@@ -86,6 +86,7 @@ class EPANETEnv(Env):
         self.tstep = 1
         self.i = 0
         self.pump_energy_cost: float = 0.0
+        self.n_switches = 0
         self.prev_action = 1
 
         H = self.d.getNodeHydraulicHead()
@@ -97,7 +98,7 @@ class EPANETEnv(Env):
                 *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
                 tank_head,
                 minute_in_day(self.i),
-                self.prev_action
+                self.n_switches
             ]
         )
 
@@ -115,6 +116,9 @@ class EPANETEnv(Env):
 
         self.tstep = self.d.nextHydraulicAnalysisStep()
 
+        if self.prev_action != action:
+            self.n_switches += 1
+
         info = {
             "pump_status": self.d.getLinkStatus(self.pump_index),
             "pump_energy_usage": pump_energy_usage,
@@ -128,13 +132,13 @@ class EPANETEnv(Env):
                     *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
                     np.round(tank_head, decimals=4),
                     minute_in_day(self.i),
-                    self.prev_action,
+                    self.n_switches,
                 ]
             )
 
         reward = reward_low_energy_cost(self.pump_energy_cost) \
             * reward_high_tank_head(tank_head) \
-            * (float(self.prev_action == action) + 1) / 2.0
+            * reward_few_pump_switches(self.n_switches)
 
         self.prev_action = action
 

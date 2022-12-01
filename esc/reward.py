@@ -13,3 +13,6 @@ def reward_low_energy_cost(energy_cost):
     # return 1 - expit(6 * (2 * (energy_cost + 50) / 400 - 1))
     # return 1.0 / (energy_cost + 1.0) ** 0.25
     return -(1/200) * energy_cost + 1
+
+def reward_few_pump_switches(n_switches):
+    return 1 - expit(6 * (2 * n_switches / 50 - 1))
