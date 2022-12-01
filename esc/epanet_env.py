@@ -23,10 +23,6 @@ N_SIMULATION_STEPS = SIMULATION_DURATION_S / SIMULATION_TIMESTEP_S
 tankID = "T1"
 pumpID = "PUMP"
 
-# Number of simulation steps of the 
-N = 10
-M = 10
-
 demand_sample_24h = relative_occupant_water_demand(np.arange(N_SIMULATION_STEPS))
 
 
@@ -60,6 +56,21 @@ def initialize_epanet():
 
 
 class EPANETEnv(Env):
+    d: epanet
+    
+    # Network constants
+    tank_index: int
+    pump_index: int
+    tank_elevation: float
+    
+    # Simulation counters
+    tstep: int
+    i: int
+
+    # Accumulating state
+    pump_energy_cost: float
+    n_switches: int
+    
     def __init__(self, env_config):
         # Action space is one of {0, 1}, where 0 means the pump is off, and 1
         # means the pump is on
@@ -72,77 +83,74 @@ class EPANETEnv(Env):
         # is unbounded in either direction, but water demand must be
         # non-negative. Highest possible tank value is MEAN_WATER_TANK_HEIGHT_M.
         self.observation_space = Box(
-            low=np.array([  *np.zeros(N),        *(-np.inf * np.ones(M)),  -np.inf,                      0.0, 0.0]),
-            high=np.array([ *(np.inf * np.ones(N)), *(np.inf * np.ones(M)), MEAN_WATER_TANK_HEIGHT_M, 1440.0, np.inf])
+            low=np.array([  0.0,   -np.inf, -np.inf,                   0.0,    0.0]),
+            high=np.array([ np.inf, np.inf,  MEAN_WATER_TANK_HEIGHT_M, 1440.0, np.inf])
         )
 
     def reset(self):
         self.d = initialize_epanet()
 
-        self.tank_index = self.d.getNodeIndex(tankID)
-        self.pump_index = self.d.getLinkIndex(pumpID)
-        self.tank_elevation = self.d.getNodeElevations(self.tank_index)
+        self.tank_index = self.d.getNodeIndex(tankID) # type: ignore
+        self.pump_index = self.d.getLinkIndex(pumpID) # type: ignore
+        self.tank_elevation = self.d.getNodeElevations(self.tank_index)  # type: ignore
 
         self.tstep = 1
         self.i = 0
-        self.pump_energy_cost: float = 0.0
+        
+        self.pump_energy_cost = 0.0
         self.n_switches = 0
-        self.prev_action = 1
 
-        H = self.d.getNodeHydraulicHead()
-        tank_head = H[self.tank_index - 1] - self.tank_elevation
-
+        return self.observe()
+        
+    def get_tank_head(self):
+        return self.d.getNodeHydraulicHead(self.tank_index) - self.tank_elevation
+        
+    def observe(self):
         return np.array(
             [
-                *electricity_rate(np.arange(self.i - N, self.i)),  # type: ignore
-                *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
-                tank_head,
+                electricity_rate(self.i),
+                relative_occupant_water_demand(self.i),
+                self.get_tank_head(),
                 minute_in_day(self.i),
                 self.n_switches
             ]
         )
 
-    def step(self, action):
-        H = self.d.getNodeHydraulicHead()
-        tank_head = H[self.tank_index - 1] - self.tank_elevation
-
-        self.d.setLinkStatus(self.pump_index, action)
-        self.i += 1
-
-        self.d.runHydraulicAnalysis()
-
-        pump_energy_usage = self.d.getLinkEnergy(self.pump_index)
-        self.pump_energy_cost += electricity_rate(self.i) * pump_energy_usage  # type: ignore
-
-        self.tstep = self.d.nextHydraulicAnalysisStep()
-
-        if self.prev_action != action:
-            self.n_switches += 1
-
-        info = {
-            "pump_status": self.d.getLinkStatus(self.pump_index),
-            "pump_energy_usage": pump_energy_usage,
-            "flows": self.d.getLinkFlows(),
-            "pressures": self.d.getNodePressure(),
-        }
-
-        obs = np.array(
-                [
-                    *electricity_rate(np.arange(self.i - N, self.i)),  # type: ignore
-                    *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
-                    np.round(tank_head, decimals=4),
-                    minute_in_day(self.i),
-                    self.n_switches,
-                ]
-            )
-
-        reward = reward_low_energy_cost(self.pump_energy_cost) \
-            * reward_high_tank_head(tank_head) \
+    def compute_reward(self):
+        return reward_low_energy_cost(self.pump_energy_cost) \
+            * reward_high_tank_head(self.get_tank_head()) \
             * reward_few_pump_switches(self.n_switches)
 
-        self.prev_action = action
+    def step(self, action):
+        # Gather observation data before action
+        prev_pump_state = self.d.getLinkStatus(self.pump_index)
+        
+        # Perform action
+        self.d.setLinkStatus(self.pump_index, action)
 
-        done = self.tstep <= 0
+        # Update simulation state
+        self.d.runHydraulicAnalysis()
+
+        # Gather observation data after action
+        pump_energy_usage = self.d.getLinkEnergy(self.pump_index)
+
+        # Update accumulators
+        self.pump_energy_cost += electricity_rate(self.i) * pump_energy_usage  # type: ignore
+        if prev_pump_state != self.d.getLinkStatus(self.pump_index):
+            self.n_switches += 1
+
+        # Compute observation and reward
+        obs = self.observe()
+        reward = self.compute_reward()
+
+        # Update simulation counters
+        self.tstep = self.d.nextHydraulicAnalysisStep()
+        self.i += 1
+
+        # Check if we've completed the simulation. Sometimes the hydraulic
+        # simulation wants to run a little longer than N_SIMULATION_STEPS so we
+        # put a hard cap in addition to EPANET's own logic.
+        done = self.tstep <= 0 or self. i > N_SIMULATION_STEPS
         if done:
             self.d.closeHydraulicAnalysis()
             self.d.unload()
@@ -156,5 +164,5 @@ class EPANETEnv(Env):
             # Whether or not the simulation is done
             done,
             # Diagnostic info
-            info,
+            {},
         )
