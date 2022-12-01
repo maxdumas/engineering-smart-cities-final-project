@@ -72,8 +72,8 @@ class EPANETEnv(Env):
         # is unbounded in either direction, but water demand must be
         # non-negative. Highest possible tank value is MEAN_WATER_TANK_HEIGHT_M.
         self.observation_space = Box(
-            low=np.array([  *np.zeros(N),        *(-np.inf * np.ones(M)),  -np.inf,                      0.0]),
-            high=np.array([ *(np.inf * np.ones(N)), *(np.inf * np.ones(M)), MEAN_WATER_TANK_HEIGHT_M, 1440.0])
+            low=np.array([  *np.zeros(N),        *(-np.inf * np.ones(M)),  -np.inf,                      0.0, 0.0]),
+            high=np.array([ *(np.inf * np.ones(N)), *(np.inf * np.ones(M)), MEAN_WATER_TANK_HEIGHT_M, 1440.0, 1.0])
         )
 
     def reset(self):
@@ -86,6 +86,7 @@ class EPANETEnv(Env):
         self.tstep = 1
         self.i = 0
         self.pump_energy_cost: float = 0.0
+        self.prev_action = 1
 
         H = self.d.getNodeHydraulicHead()
         tank_head = H[self.tank_index - 1] - self.tank_elevation
@@ -95,7 +96,8 @@ class EPANETEnv(Env):
                 *electricity_rate(np.arange(self.i - N, self.i)),  # type: ignore
                 *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
                 tank_head,
-                minute_in_day(self.i)
+                minute_in_day(self.i),
+                self.prev_action
             ]
         )
 
@@ -120,6 +122,22 @@ class EPANETEnv(Env):
             "pressures": self.d.getNodePressure(),
         }
 
+        obs = np.array(
+                [
+                    *electricity_rate(np.arange(self.i - N, self.i)),  # type: ignore
+                    *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
+                    np.round(tank_head, decimals=4),
+                    minute_in_day(self.i),
+                    self.prev_action,
+                ]
+            )
+
+        reward = reward_low_energy_cost(self.pump_energy_cost) \
+            * reward_high_tank_head(tank_head) \
+            * (float(self.prev_action == action) + 1) / 2.0
+
+        self.prev_action = action
+
         done = self.tstep <= 0
         if done:
             self.d.closeHydraulicAnalysis()
@@ -128,17 +146,9 @@ class EPANETEnv(Env):
 
         return (
             # Observation
-            np.array(
-                [
-                    *electricity_rate(np.arange(self.i - N, self.i)),  # type: ignore
-                    *relative_occupant_water_demand(np.arange(self.i - M, self.i)),  # type: ignore
-                    np.round(tank_head, decimals=4),
-                    minute_in_day(self.i)
-                ]
-            ),
+            obs,
             # Reward
-            reward_low_energy_cost(self.pump_energy_cost)
-            * reward_high_tank_head(tank_head),
+            reward,
             # Whether or not the simulation is done
             done,
             # Diagnostic info
