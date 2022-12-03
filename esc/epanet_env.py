@@ -84,7 +84,7 @@ class EPANETEnv(Env):
         # non-negative. Highest possible tank value is MEAN_WATER_TANK_HEIGHT_M.
         self.observation_space = Box(
             low=np.array([  0.0,   -np.inf, -np.inf,                   0.0,    0.0]),
-            high=np.array([ np.inf, np.inf,  MEAN_WATER_TANK_HEIGHT_M, 1440.0, np.inf])
+            high=np.array([ np.inf, np.inf,  MEAN_WATER_TANK_HEIGHT_M, np.inf, np.inf])
         )
 
     def reset(self):
@@ -96,9 +96,12 @@ class EPANETEnv(Env):
 
         self.tstep = 1
         self.i = 0
-        
+
         self.pump_energy_cost = 0.0
         self.n_switches = 0
+
+        # Initialize the system with the pump off.
+        self.d.setLinkStatus(self.pump_index, 0)
 
         return self.observe()
         
@@ -111,8 +114,8 @@ class EPANETEnv(Env):
                 electricity_rate(self.i),
                 relative_occupant_water_demand(self.i),
                 self.get_tank_head(),
-                minute_in_day(self.i),
-                self.n_switches
+                self.pump_energy_cost,
+                self.n_switches,
             ]
         )
 

@@ -3,9 +3,9 @@ from scipy.special import expit
 from esc.util import MEAN_WATER_TANK_HEIGHT_M
 
 def reward_high_tank_head(tank_head):
-    """A function that returns 1 when the tank is full, and 0 when the tank is
+    """A function that returns 1 when the tank is above 1.5m, and 0 when the tank is
     empty, with an S-shaped curve for all values between."""
-    return expit(6 * (2 * tank_head / MEAN_WATER_TANK_HEIGHT_M - 1))
+    return expit(6 * (2 * tank_head / 1.5 - 1))
 
 def reward_low_energy_cost(energy_cost):
     """A function that returns 1 if energy_cost is 0, and returns reward
