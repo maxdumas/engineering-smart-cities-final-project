@@ -150,26 +150,23 @@ class EPANETEnv(Env):
         # Compute observation and reward
         obs = self.observe()
         if prev_pump_state != curr_pump_state:
-            # Strongly penalize any switching of the pump, so as to encourage
-            # the pump to switch as little as possible.
-            reward = -1.0
             self.n_switches += 1
-        else:
-            if tank_head > 1.5:
-                if curr_pump_state == 0:
-                    # If the pump is off, provide neutral reward.
-                    reward = 0.0
-                else:
-                    # If the tank is above a minimum level and the pump is on,
-                    # provide reward proportional to how much the current energy
-                    # price is. For example, if the electricity price is $0.10
-                    # kWh, provide -1.0 reward. If energy is free, provide 1.0
-                    # reward.
-                    reward = 1 - 2 * expit(6 * ((2 * energy_price - CHEAP_ENERGY_PRICE) / EXPENSIVE_ENERGY_PRICE - 1))
+
+        if tank_head > 1.5:
+            if curr_pump_state == 0:
+                # If the pump is off, provide neutral reward.
+                reward = 0.0
             else:
-                # Strongly penalize ever allowing the tank to dip below minimum
-                # allowed levels.
-                reward = -1.0
+                # If the tank is above a minimum level and the pump is on,
+                # provide reward proportional to how much the current energy
+                # price is. For example, if the electricity price is $0.10
+                # kWh, provide -1.0 reward. If energy is free, provide 1.0
+                # reward.
+                reward = 1 - 2 * expit(6 * ((2 * energy_price - CHEAP_ENERGY_PRICE) / EXPENSIVE_ENERGY_PRICE - 1))
+        else:
+            # Strongly penalize ever allowing the tank to dip below minimum
+            # allowed levels.
+            reward = -1.0
 
         # Update simulation counters
         self.tstep = self.d.nextHydraulicAnalysisStep()
@@ -178,8 +175,8 @@ class EPANETEnv(Env):
         # Check if we've completed the simulation. Sometimes the hydraulic
         # simulation wants to run a little longer than N_SIMULATION_STEPS so we
         # put a hard cap in addition to EPANET's own logic. We also have failed
-        # if the tank is empty or if we've entered crazy toggling behavior.
-        done = self.tstep <= 0 or self. i > N_SIMULATION_STEPS or tank_head <= 0.0 or self.n_switches > 50
+        # if the tank is empty.
+        done = self.tstep <= 0 or self. i > N_SIMULATION_STEPS or tank_head <= 0.0
         if done:
             self.d.closeHydraulicAnalysis()
             self.d.unload()
