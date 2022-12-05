@@ -12,7 +12,8 @@ from esc.electricity_rates import electricity_rate, all_rates
 from esc.reward import reward_high_tank_head, reward_low_energy_cost, reward_few_pump_switches
 from esc.water_usage import (
     TYPICAL_BUILDING_MEAN_WATER_CONSUMPTION_LITER_PER_MINUTE,
-    relative_occupant_water_demand,
+    typical_building_water_demand,
+    relative_occupant_water_demand
 )
 from esc.util import MEAN_WATER_TANK_HEIGHT_M, MINUTES_PER_DAY
 
@@ -26,8 +27,8 @@ CHEAP_ENERGY_PRICE = np.quantile(all_rates, 0.4)
 EXPENSIVE_ENERGY_PRICE = np.quantile(all_rates, 0.8)
 MAX_ENERGY_PRICE = np.max(all_rates)
 
-MIN_WATER_DEMAND = np.min(relative_occupant_water_demand(np.arange(MINUTES_PER_DAY)))
-MAX_WATER_DEMAND = np.max(relative_occupant_water_demand(np.arange(MINUTES_PER_DAY)))
+MIN_WATER_DEMAND = np.min(typical_building_water_demand(np.arange(MINUTES_PER_DAY)))
+MAX_WATER_DEMAND = np.max(typical_building_water_demand(np.arange(MINUTES_PER_DAY)))
 
 tankID = "T1"
 pumpID = "PUMP"
@@ -73,6 +74,7 @@ class EPANETEnv(Env):
     tank_elevation: float
 
     n_switches: int
+    pump_state: int
     
     # Simulation counters
     tstep: int
@@ -82,16 +84,10 @@ class EPANETEnv(Env):
         # Action space is one of {0, 1}, where 0 means the pump is off, and 1
         # means the pump is on
         self.action_space = Discrete(2)
-        # Observation space is N+M+2 dimensional: First N dimensions are the N
-        # electricity prices in the simulation steps prior to the current step,
-        # Dimensions N+1 through N+M are the N occupant water demand rates in
-        # the simulation step prior to the current step. N+M+1 is the current
-        # water tank height. N+M+2 is the minute of the day. Electricity price
-        # is unbounded in either direction, but water demand must be
-        # non-negative. Highest possible tank value is MEAN_WATER_TANK_HEIGHT_M.
+
         self.observation_space = Box(
-            low=np.array([  MIN_ENERGY_PRICE, MIN_WATER_DEMAND,  0.0]),
-            high=np.array([ MAX_ENERGY_PRICE, MAX_WATER_DEMAND,  MEAN_WATER_TANK_HEIGHT_M])
+            low=np.array([  0.0, MIN_WATER_DEMAND,  0.0]),
+            high=np.array([ 1.0, MAX_WATER_DEMAND,  MEAN_WATER_TANK_HEIGHT_M])
         )
 
     def reset(self):
@@ -102,12 +98,13 @@ class EPANETEnv(Env):
         self.tank_elevation = self.d.getNodeElevations(self.tank_index)  # type: ignore
 
         self.n_switches = 0
+        self.pump_state = 0
 
         self.tstep = 1
         self.i = 0
 
         # Initialize the system with the pump off.
-        self.d.setLinkStatus(self.pump_index, 0)
+        self.d.setLinkStatus(self.pump_index, self.pump_state)
 
         return self.observe()
         
@@ -121,52 +118,50 @@ class EPANETEnv(Env):
     def observe(self):
         return np.array(
             [
-                electricity_rate(self.i),
-                relative_occupant_water_demand(self.i),
+                self.pump_state,
+                # electricity_rate(self.i),
+                typical_building_water_demand(self.i),
                 self.get_tank_head(),
             ]
         )
 
     def step(self, action):
-        # Gather observation data before action
-        prev_pump_state = self.d.getLinkStatus(self.pump_index)
-        
         # Perform action
-        self.d.setLinkStatus(self.pump_index, action)
+        if self.pump_state != action:
+            # Only switch the pump if our current action represents a change
+            # from the status quo.
+            self.d.setLinkStatus(self.pump_index, action)
+            self.pump_state = action  # type: ignore
+            self.n_switches += 1
 
         # Update simulation state
         self.d.runHydraulicAnalysis()
 
-        # Gather observation data after action
-        curr_pump_state = self.d.getLinkStatus(self.pump_index)
         # pump_energy_usage = self.d.getLinkEnergy(self.pump_index)
         tank_head = self.get_tank_head()
 
         # Update accumulators
-        energy_price = electricity_rate(self.i)
+        # energy_price = electricity_rate(self.i)
         # energy_cost = energy_price * pump_energy_usage
         # self.pump_energy_cost += energy_cost  # type: ignore
 
         # Compute observation and reward
         obs = self.observe()
-        if prev_pump_state != curr_pump_state:
-            self.n_switches += 1
 
-        if tank_head > 1.5:
-            if curr_pump_state == 0:
-                # If the pump is off, provide neutral reward.
-                reward = 0.0
-            else:
-                # If the tank is above a minimum level and the pump is on,
-                # provide reward proportional to how much the current energy
-                # price is. For example, if the electricity price is $0.10
-                # kWh, provide -1.0 reward. If energy is free, provide 1.0
-                # reward.
-                reward = 1 - 2 * expit(6 * ((2 * energy_price - CHEAP_ENERGY_PRICE) / EXPENSIVE_ENERGY_PRICE - 1))
+        if self.pump_state == 1:
+            # If the pump is on, provide no reward. This represents us spending
+            # money on electricity and is only desirable if necessary.
+            reward = 0.0
         else:
-            # Strongly penalize ever allowing the tank to dip below minimum
-            # allowed levels.
-            reward = -1.0
+            if tank_head > 1.5:
+                # If the pump is off and the tank is full enough, provide
+                # reward. This is what we want!
+                reward = 1.0
+            else:
+                # If the tank is close to empty and the pump is off, provide
+                # negative reward. This is because our other objective is to
+                # ensure residents always have enough water.
+                reward = -1.0
 
         # Update simulation counters
         self.tstep = self.d.nextHydraulicAnalysisStep()
@@ -176,7 +171,7 @@ class EPANETEnv(Env):
         # simulation wants to run a little longer than N_SIMULATION_STEPS so we
         # put a hard cap in addition to EPANET's own logic. We also have failed
         # if the tank is empty.
-        done = self.tstep <= 0 or self. i > N_SIMULATION_STEPS or tank_head <= 0.0
+        done = self.tstep <= 0 or self.i > N_SIMULATION_STEPS
         if done:
             self.d.closeHydraulicAnalysis()
             self.d.unload()
