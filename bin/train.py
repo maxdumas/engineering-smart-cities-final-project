@@ -3,7 +3,7 @@ from ray.rllib.utils.framework import try_import_tf
 tf1, tf, tfv = try_import_tf()
 tf1.enable_eager_execution()
 
-from ray.rllib.algorithms.ppo import PPO
+from ray.rllib.algorithms.dqn import DQN
 import ray
 from tqdm import tqdm
 
@@ -56,7 +56,7 @@ ray.init(
 )
 
 # Create our RLlib Trainer.
-algo = PPO(env=EPANETEnv, config=config)
+algo = DQN(env=EPANETEnv, config=config)
 # algo.restore(
 #     "/Users/maxdumas/ray_results/PPO_EPANETEnv_2022-12-04_17-41-00x8n0zze7/checkpoint_000012"
 # )
