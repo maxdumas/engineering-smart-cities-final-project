@@ -54,16 +54,16 @@ water_demand = np.interp(
 
 
 def relative_occupant_water_demand(
-    t: ArrayLike,
-) -> Union[np.floating[Any], NDArray[np.floating[Any]]]:
+    t,
+):
     """Given a the time of day in minutes t, returns the estimated factor of
     occupant water demand relative to average water demand."""
     return water_demand[minute_in_day(t)]
 
 
 def typical_building_water_demand(
-    t: ArrayLike,
-) -> Union[np.floating[Any], NDArray[np.floating[Any]]]:
+    t,
+):
     """Given a time of day in minutes t, returns the estimated water consumption
     of a typical Manhattan building over 6 stories tall at that time, in liters
     per minute."""
