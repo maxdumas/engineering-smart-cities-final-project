@@ -148,20 +148,18 @@ class EPANETEnv(Env):
         # Compute observation and reward
         obs = self.observe()
 
-        if self.pump_state == 1:
-            # If the pump is on, provide no reward. This represents us spending
-            # money on electricity and is only desirable if necessary.
-            reward = 0.0
+        if self.pump_state == 0 and tank_head > 1.5:
+            # If the pump is off and the tank is full enough, provide
+            # reward. This is what we want!
+            reward = 1.0
+        elif self.pump_state == 1 and tank_head <= 1.5:
+            # If the tank is getting close to empty, reward pumping.
+            reward = 1.0
         else:
-            if tank_head > 1.5:
-                # If the pump is off and the tank is full enough, provide
-                # reward. This is what we want!
-                reward = 1.0
-            else:
-                # If the tank is close to empty and the pump is off, provide
-                # negative reward. This is because our other objective is to
-                # ensure residents always have enough water.
-                reward = -1.0
+            # If the tank is close to empty and the pump is off, or if tank is
+            # mostly full and we're pumping provide negative reward. We're
+            # either risking running out of water or wasting electricity.
+            reward = -1.0
 
         # Update simulation counters
         self.tstep = self.d.nextHydraulicAnalysisStep()
