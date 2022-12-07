@@ -94,15 +94,12 @@ def template_model(symvar_type="SX"):
     _electricity_rate = model.set_variable(var_type="_tvp", var_name="electricity_rate")
     _water_demand = model.set_variable(var_type="_tvp", var_name="water_demand")
 
-    # Observe electricity rate and water demand
-    model.set_expression(expr_name="electricity_rate", expr=_electricity_rate)
-    model.set_expression(expr_name="water_demand", expr=_water_demand)
+
 
     # Set expression. These can be used in the cost function, as non-linear constraints
     # or just to monitor another output.
     tank_vol = _x[0]
     energy_cost = _x[1]
-    model.set_expression(expr_name="power_cost", expr=energy_cost)
     tank_reward = 1 - 1 / (1 + exp(-6 * (2 * tank_vol / (TANK_VOLUME_L / 3) - 1)))
     energy_reward = 1 / (1 + exp(-6 * (2 * energy_cost / 50 - 1)))
     model.set_expression(expr_name="cost", expr=energy_reward + tank_reward)
@@ -113,6 +110,11 @@ def template_model(symvar_type="SX"):
         _x[1] + _electricity_rate * pump_status
     )
     model.set_rhs("x", x_next)
+
+    # Variables we want to easily observe in charts
+    model.set_expression(expr_name="water_demand", expr=_water_demand)
+    model.set_expression(expr_name="electricity_rate", expr=_electricity_rate)
+    model.set_expression(expr_name="power_cost", expr=energy_cost)
 
     model.setup()
 
