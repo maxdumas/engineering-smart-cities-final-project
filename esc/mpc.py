@@ -7,7 +7,7 @@ from casadi.tools import *
 from esc.water_usage import typical_building_water_demand
 from esc.electricity_rates import electricity_rate
 
-N_SIMULATION_STEPS = 1440
+N_SIMULATION_STEPS = 2880
 N_HORIZON = 720
 PUMP_MAX_FLOW_LPM = 150
 TANK_VOLUME_L = 38430
@@ -106,8 +106,8 @@ def template_model(symvar_type="SX"):
 
     pump_status = _u[0] #if_else(_u[0] < 0.5, 0.0, 1.0)
     x_next = vertcat(
-        _x[0] + PUMP_MAX_FLOW_LPM * pump_status - _water_demand,
-        _x[1] + _electricity_rate * pump_status
+        tank_vol + PUMP_MAX_FLOW_LPM * pump_status - _water_demand,
+        energy_cost + _electricity_rate * pump_status
     )
     model.set_rhs("x", x_next)
 
@@ -123,8 +123,8 @@ def template_model(symvar_type="SX"):
 
 def run():
     """ User settings: """
-    show_animation = True
-    store_results = False
+    show_animation = False
+    store_results = True
 
     """
     Get configured do-mpc modules:
@@ -159,10 +159,13 @@ def run():
     Run MPC main loop:
     """
 
+    u_total = []
     for k in range(N_SIMULATION_STEPS):
         u0 = mpc.make_step(x0)
         y_next = simulator.make_step(u0)
         x0 = estimator.make_step(y_next)
+
+        u_total.append(np.round(u0[0]))
 
         if show_animation:
             graphics.plot_results(t_ind=k)
@@ -171,11 +174,13 @@ def run():
             plt.show()
             plt.pause(0.01)
 
+    
+    np.save("pump_states.npy", np.array(u_total))
     input("Press any key to exit.")
 
     # Store results:
     if store_results:
-        do_mpc.data.save_results([mpc, simulator], "oscillating_masses")
+        do_mpc.data.save_results([mpc, simulator], "water_tank")
 
     return model, mpc, simulator
 
