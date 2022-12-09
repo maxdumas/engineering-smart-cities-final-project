@@ -9,8 +9,21 @@ from esc.electricity_rates import electricity_rate
 
 N_SIMULATION_STEPS = 2880
 N_HORIZON = 720
-PUMP_MAX_FLOW_LPM = 150
 TANK_VOLUME_L = 38430
+TYPICAL_BUILDING_HEIGHT_M = 34.75138
+
+PUMP_MAX_FLOW_LPM = 115
+PUMP_POWER_USAGE_W = 1200
+
+TURBINE_OUTFLOW_LPM = 100
+TURBINE_COMPONENT_EFFICIENCY = 0.85
+G = 9.81
+WATT_SEC_TO_KWH = 1.0 / 3600.0 / 1000.0
+TURBINE_NET_HEAD = TYPICAL_BUILDING_HEIGHT_M + 1.5
+HEAD_LOSS = 0.9
+
+TURBINE_OUTFLOW_LPS = TURBINE_OUTFLOW_LPM / 60
+TURBINE_POWER_GENERATION_W = 5.0 * (TURBINE_OUTFLOW_LPS * G * TURBINE_NET_HEAD * HEAD_LOSS * TURBINE_COMPONENT_EFFICIENCY)
 
 def template_simulator(model):
     simulator = do_mpc.simulator.Simulator(model)
@@ -21,7 +34,7 @@ def template_simulator(model):
 
     def tvp_fun(t_now):
         tvp_template["electricity_rate"] = electricity_rate(t_now)
-        tvp_template["water_demand"] = typical_building_water_demand(t_now)
+        tvp_template["water_demand"] = typical_building_water_demand(t_now) * 0.5
         return tvp_template
 
     simulator.set_tvp_fun(tvp_fun)
@@ -49,7 +62,7 @@ def template_mpc(model):
     mpc.set_objective(mterm=mterm, lterm=lterm)
     mpc.set_rterm(u=1e-4)
 
-    max_x = np.array([[TANK_VOLUME_L], [400.0]])
+    max_x = np.array([[TANK_VOLUME_L], [np.inf]])
 
     mpc.bounds["lower", "_x", "x"] = np.zeros_like(max_x)
     mpc.bounds["upper", "_x", "x"] = max_x
@@ -62,7 +75,7 @@ def template_mpc(model):
     def tvp_fun(t_now):
         for k in range(N_HORIZON + 1):
             tvp_template["_tvp", k, "electricity_rate"] = electricity_rate(t_now + k)
-            tvp_template["_tvp", k, "water_demand"] = typical_building_water_demand(t_now + k)
+            tvp_template["_tvp", k, "water_demand"] = typical_building_water_demand(t_now + k) * 0.5
         return tvp_template
 
     mpc.set_tvp_fun(tvp_fun)
@@ -76,45 +89,41 @@ def template_model(symvar_type="SX"):
     model_type = "discrete"  # either 'discrete' or 'continuous'
     model = do_mpc.model.Model(model_type, symvar_type)
 
-    # Simple oscillating masses example with two masses and two inputs.
-    # States are the position and velocitiy of the two masses.
-
     # States struct (optimization variables):
     # Our state is:
     # [
     #    tank volume,
-    #    total power cost
+    #    total energy cost
+    #    potential energy cost, which is the most energy that could be spent if the pump was just always on
     # ]
     _x = model.set_variable(var_type="_x", var_name="x", shape=(2, 1))
+    tank_vol = _x[0]
+    energy_cost = _x[1]
 
     # Input struct (optimization variables):
-    # This is meant to just be 0 or 1, to control whether the pump is on or not.
-    _u = model.set_variable(var_type="_u", var_name="u", shape=(1, 1))
+    # 2-dimensional, first value controls pump inflow, second value controls turbine outflow
+    _u = model.set_variable(var_type="_u", var_name="u", shape=(2, 1))
+    pump_status = _u[0]
+    turbine_status = _u[1]
 
     _electricity_rate = model.set_variable(var_type="_tvp", var_name="electricity_rate")
     _water_demand = model.set_variable(var_type="_tvp", var_name="water_demand")
 
+    # Objective formulation
+    tank_cost_component = 1 - 1 / (1 + exp(-6 * (2 * tank_vol / (TANK_VOLUME_L / 4) - 1)))
+    energy_cost_component = 1 / (1 + exp(-6 * (2 * energy_cost / 1.25 - 1)))
+    model.set_expression(expr_name="cost", expr=energy_cost_component + tank_cost_component)
 
-
-    # Set expression. These can be used in the cost function, as non-linear constraints
-    # or just to monitor another output.
-    tank_vol = _x[0]
-    energy_cost = _x[1]
-    tank_reward = 1 - 1 / (1 + exp(-6 * (2 * tank_vol / (TANK_VOLUME_L / 3) - 1)))
-    energy_reward = 1 / (1 + exp(-6 * (2 * energy_cost / 50 - 1)))
-    model.set_expression(expr_name="cost", expr=energy_reward + tank_reward)
-
-    pump_status = _u[0] #if_else(_u[0] < 0.5, 0.0, 1.0)
     x_next = vertcat(
-        tank_vol + PUMP_MAX_FLOW_LPM * pump_status - _water_demand,
-        energy_cost + _electricity_rate * pump_status
+        tank_vol + PUMP_MAX_FLOW_LPM * pump_status - _water_demand - TURBINE_OUTFLOW_LPM * turbine_status,
+        energy_cost + _electricity_rate * WATT_SEC_TO_KWH * 60 * (PUMP_POWER_USAGE_W * pump_status - TURBINE_POWER_GENERATION_W * turbine_status),
     )
     model.set_rhs("x", x_next)
 
     # Variables we want to easily observe in charts
     model.set_expression(expr_name="water_demand", expr=_water_demand)
     model.set_expression(expr_name="electricity_rate", expr=_electricity_rate)
-    model.set_expression(expr_name="power_cost", expr=energy_cost)
+    model.set_expression(expr_name="energy_cost", expr=energy_cost)
 
     model.setup()
 
@@ -123,8 +132,8 @@ def template_model(symvar_type="SX"):
 
 def run():
     """ User settings: """
-    show_animation = False
-    store_results = True
+    show_animation = True
+    store_results = False
 
     """
     Get configured do-mpc modules:
@@ -140,7 +149,7 @@ def run():
     """
     np.random.seed(99)
 
-    x0 = np.array([TANK_VOLUME_L / 3, 0.0])
+    x0 = np.array([TANK_VOLUME_L, 0.0])
     mpc.x0 = x0
     simulator.x0 = x0
     estimator.x0 = x0
