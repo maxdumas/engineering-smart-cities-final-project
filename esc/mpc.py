@@ -12,10 +12,10 @@ N_HORIZON = 720
 TANK_VOLUME_L = 38430
 TYPICAL_BUILDING_HEIGHT_M = 34.75138
 
-PUMP_MAX_FLOW_LPM = 115
+PUMP_MAX_FLOW_LPM = 150
 PUMP_POWER_USAGE_W = 1200
 
-TURBINE_OUTFLOW_LPM = 100
+TURBINE_OUTFLOW_LPM = 350
 TURBINE_COMPONENT_EFFICIENCY = 0.85
 G = 9.81
 WATT_SEC_TO_KWH = 1.0 / 3600.0 / 1000.0
@@ -23,7 +23,7 @@ TURBINE_NET_HEAD = TYPICAL_BUILDING_HEIGHT_M + 1.5
 HEAD_LOSS = 0.9
 
 TURBINE_OUTFLOW_LPS = TURBINE_OUTFLOW_LPM / 60
-TURBINE_POWER_GENERATION_W = 5.0 * (TURBINE_OUTFLOW_LPS * G * TURBINE_NET_HEAD * HEAD_LOSS * TURBINE_COMPONENT_EFFICIENCY)
+TURBINE_POWER_GENERATION_W = 1.5 * TURBINE_OUTFLOW_LPS * G * TURBINE_NET_HEAD * HEAD_LOSS * TURBINE_COMPONENT_EFFICIENCY
 
 def template_simulator(model):
     simulator = do_mpc.simulator.Simulator(model)
@@ -34,7 +34,7 @@ def template_simulator(model):
 
     def tvp_fun(t_now):
         tvp_template["electricity_rate"] = electricity_rate(t_now)
-        tvp_template["water_demand"] = typical_building_water_demand(t_now) * 0.5
+        tvp_template["water_demand"] = typical_building_water_demand(t_now)
         return tvp_template
 
     simulator.set_tvp_fun(tvp_fun)
@@ -75,7 +75,7 @@ def template_mpc(model):
     def tvp_fun(t_now):
         for k in range(N_HORIZON + 1):
             tvp_template["_tvp", k, "electricity_rate"] = electricity_rate(t_now + k)
-            tvp_template["_tvp", k, "water_demand"] = typical_building_water_demand(t_now + k) * 0.5
+            tvp_template["_tvp", k, "water_demand"] = typical_building_water_demand(t_now + k)
         return tvp_template
 
     mpc.set_tvp_fun(tvp_fun)
